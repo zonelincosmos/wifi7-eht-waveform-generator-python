@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wifi7-eht-waveform-generator-python"
+version = "1.0.0"
+description = "IEEE 802.11be EHT SU waveform generator (Wi-Fi 7)"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "zonelincosmos"}]
+requires-python = ">=3.9"
+dependencies = ["numpy>=1.20"]
+keywords = [
+    "wifi-7", "ieee-802-11be", "wlan", "waveform", "ofdm",
+    "4096-qam", "ldpc", "bcc", "dpd", "signal-processing",
+]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Communications",
+    "Operating System :: OS Independent",
+]
+
+[project.optional-dependencies]
+plots = ["matplotlib>=3.3"]
+
+[project.urls]
+Homepage = "https://github.com/zonelincosmos/wifi7-eht-waveform-generator-python"
+Issues   = "https://github.com/zonelincosmos/wifi7-eht-waveform-generator-python/issues"
+
+[tool.setuptools]
+packages = ["fields", "modulation", "coding", "utils"]
+py-modules = ["eht_waveform_gen", "eht_config", "eht_constants"]

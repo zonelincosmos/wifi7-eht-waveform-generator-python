@@ -1,0 +1,30 @@
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# Generated waveform outputs and diagnostic plots from run_example.py
+*.npz
+*.mat
+eht_waveform_*.png
+
+# Tests / reference data / verification artefacts (not shipped)
+tests/
+parity_report*.csv
+sweep_run.log
+VERIFICATION_REPORT.md
+
+# Python packaging
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

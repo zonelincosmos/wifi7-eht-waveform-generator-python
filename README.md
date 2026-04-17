@@ -126,34 +126,25 @@ Valid `(LTFType, GI)` pairs per IEEE 802.11be-2024 Table 36-36:
 `eht_waveform_gen` accepts the following keyword arguments (defaults
 in parentheses):
 
-| Argument               | Meaning                                             | Default |
-| ---------------------- | --------------------------------------------------- | ------- |
-| `BW`                   | Channel bandwidth, MHz                              | 80      |
-| `MCS`                  | EHT modulation-coding scheme index                  | 7       |
-| `GI`                   | Data-field guard interval, us                       | 0.8     |
-| `LTFType`              | EHT-LTF density: `2` or `4`, or `'auto'` from GI    | 2       |
-| `PayloadBytes`         | APEP_LENGTH in bytes (PSDU length field)            | 1000    |
-| `PSDU`                 | Optional uint8 user payload; framed via A-MPDU      | None    |
-| `ScramblerInit`        | 11-bit scrambler seed, 1..2047                      | 1       |
-| `Coding`               | `'BCC'`, `'LDPC'`, or `'auto'`                      | 'auto'  |
-| `NominalPacketPadding` | PE duration in us: 0, 8, 16, or 20                  | 16      |
-| `UL_DL`                | U-SIG-1 B6: 0 = downlink, 1 = uplink                | 0       |
-| `BSS_Color`            | U-SIG-1 B7..B12, 0..63                              | 0       |
-| `TXOP`                 | U-SIG-1 B13..B19, 0..127                            | 127     |
-| `STA_ID`               | EHT-SIG user field B0..B10, 0..2047                 | 0       |
-| `Beamformed`           | EHT-SIG user field B20: 0 or 1                      | 0       |
-| `SpatialReuse`         | EHT-SIG common B0..B3, 0..15                        | 0       |
-| `EHT_SIG_MCS`          | U-SIG-2 B9..B10, 0..3 (BPSK only implemented)       | 0       |
-| `verbose`              | Print progress and summary lines                    | True    |
-
-The returned `cfg` dict contains every derived parameter you may
-want downstream: `N_SYM`, `N_PAD`, `N_PAD_MAC_bytes`,
-`N_PAD_PHY_bits`, `N_CBPS`, `N_DBPS`, `N_SD`, `N_SP`, `NFFT`, `Fs`,
-`CP_Data`, `CP_preEHT`, `LSIG_LENGTH`, `TXTIME`, `T_PE`,
-`PE_Disambiguity`, `FieldLengths` (per-field sample count), plus
-`ldpc` (for LDPC) with `N_CW`, `L_LDPC`, `N_shrt`, `N_punc`, `N_rep`,
-`N_avbits`, `N_pld`, `N_pld_raw`, `a_init_used`,
-`has_extra_symbol`.
+| Argument               | Meaning                                             |
+| ---------------------- | --------------------------------------------------- |
+| `BW`                   | Channel bandwidth, MHz                              |
+| `MCS`                  | EHT modulation-coding scheme index                  |
+| `GI`                   | Data-field guard interval, us                       |
+| `LTFType`              | EHT-LTF density: `2` or `4`, or `'auto'` from GI    |
+| `PayloadBytes`         | APEP_LENGTH in bytes (PSDU length field)            |
+| `PSDU`                 | Optional uint8 user payload; framed via A-MPDU      |
+| `ScramblerInit`        | 11-bit scrambler seed, 1..2047                      |
+| `Coding`               | `'BCC'`, `'LDPC'`, or `'auto'`                      |
+| `NominalPacketPadding` | PE duration in us: 0, 8, 16, or 20                  |
+| `UL_DL`                | U-SIG-1 B6: 0 = downlink, 1 = uplink                |
+| `BSS_Color`            | U-SIG-1 B7..B12, 0..63                              |
+| `TXOP`                 | U-SIG-1 B13..B19, 0..127                            |
+| `STA_ID`               | EHT-SIG user field B0..B10, 0..2047                 |
+| `Beamformed`           | EHT-SIG user field B20: 0 or 1                      |
+| `SpatialReuse`         | EHT-SIG common B0..B3, 0..15                        |
+| `EHT_SIG_MCS`          | U-SIG-2 B9..B10, 0..3 (BPSK only implemented)       |
+| `verbose`              | Print progress and summary lines                    |
 
 ## Spec references
 

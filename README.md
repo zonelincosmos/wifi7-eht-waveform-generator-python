@@ -32,9 +32,6 @@ waveform, cfg, psdu = eht_waveform_gen(
 
 - **All five bandwidths**: 20, 40, 80, 160, 320 MHz.
 - **All fourteen MCS**: MCS 0 (BPSK 1/2) through MCS 13 (4096-QAM 5/6).
-- **BCC and LDPC** forward-error correction with spec-compliant
-  shortening / puncturing / repetition and LDPC extra-symbol logic
-  per IEEE 802.11be-2024 Section 36.3.13.3.5 (Eq. 36-48..36-67).
 - **Pure Python**: only `numpy` is required at runtime; `matplotlib`
   is optional and only used by `run_example.py` for plots.
 

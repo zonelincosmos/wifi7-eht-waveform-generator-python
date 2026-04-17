@@ -15,6 +15,8 @@ waveform, cfg, psdu = eht_waveform_gen(
 # cfg:      dict with every derived PHY parameter
 # psdu:     uint8 numpy array, the A-MPDU bytes fed to the Data field
 ```
+<img width="1837" height="614" alt="image" src="https://github.com/user-attachments/assets/33bde4db-069b-4bc2-8a60-a2c7b7b89514" />
+
 
 ## Table of contents
 

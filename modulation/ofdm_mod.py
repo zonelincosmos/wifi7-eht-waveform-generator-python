@@ -44,8 +44,8 @@ def ofdm_mod(freq_data, NFFT, CP_len):
             f"freq_data length ({len(freq_data)}) must equal NFFT ({NFFT})"
         )
 
-    # IFFT with sqrt(NFFT) scaling to match MATLAB convention
-    # MATLAB: ifft(x, NFFT) * sqrt(NFFT)
+    # IFFT with sqrt(NFFT) scaling to match the reference convention
+    # (reference: ifft(x, NFFT) * sqrt(NFFT))
     td_sym = np.fft.ifft(freq_data, NFFT) * np.sqrt(NFFT)
 
     # Prepend cyclic prefix: last CP_len samples of td_sym

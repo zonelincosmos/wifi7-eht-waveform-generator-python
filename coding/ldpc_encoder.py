@@ -110,7 +110,7 @@ def ldpc_encoder(info_bits, code_rate, cw_len_or_params):
         info_pos = 0
 
         for cw in range(n_cw):
-            # Per-codeword counts (1-indexed in MATLAB, 0-indexed here)
+            # Per-codeword counts (1-indexed in the reference, 0-indexed here)
             s_shrt = shrt_base + (1 if (cw + 1) <= shrt_extra else 0)
             s_punc = punc_base + (1 if (cw + 1) <= punc_extra else 0)
             s_rep = rep_base + (1 if (cw + 1) <= rep_extra else 0)

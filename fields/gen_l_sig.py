@@ -124,12 +124,12 @@ def _bpsk_map(bits):
 
 
 # =====================================================================
-# Integer to bit vector, LSB-first (matches MATLAB de2bi 'right-msb')
+# Integer to bit vector, LSB-first ('right-msb' semantics)
 # =====================================================================
 def _int2bits_lsb(val, n_bits):
     """Convert integer to LSB-first bit vector.
 
-    Equivalent to MATLAB ``de2bi(val, n_bits, 'right-msb')``:
+    Equivalent to ``de2bi(val, n_bits, 'right-msb')``:
     index 0 = LSB, index n_bits-1 = MSB.
 
     Parameters
@@ -175,7 +175,7 @@ def gen_l_sig(cfg):
     rate_bits = c['LSIG_RATE_bits'].copy()            # [1,1,0,1] = 6 Mb/s
     reserved = np.array([0], dtype=np.int8)
 
-    # MATLAB: de2bi(cfg.LSIG_LENGTH, 12, 'right-msb') -> LSB-first
+    # de2bi(cfg.LSIG_LENGTH, 12, 'right-msb') -> LSB-first
     length_bits = _int2bits_lsb(cfg['LSIG_LENGTH'], 12)
 
     parity = np.array(

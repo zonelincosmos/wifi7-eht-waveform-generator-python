@@ -30,7 +30,13 @@ def eht_scrambler(data, init_state):
         Binary vector (row or column) of 0/1 values.
     init_state : int or array_like
         If int (1..2047): 11-bit LFSR seed per Section 36.3.13.2.
-            LSB of the integer maps to x1 (leftmost cell).
+            Per Table 36-1, "the first bit of the scrambling sequence
+            equals the LSB of SCRAMBLER_INITIAL_VALUE", and the first
+            output bit is x11 (rightmost cell, reg[10]), so the LSB
+            of init_state maps to x11 (reg[10]) and the MSB maps to
+            x1 (reg[0]).  Verified against the spec test vector:
+            init = 0x7FF (all-ones) yields the first 11 output bits
+            all equal to 1 (Section 36.3.13.2 NOTE 1).
         If array_like: 11-element binary vector [x1, x2, ..., x11].
 
     Returns
@@ -42,13 +48,14 @@ def eht_scrambler(data, init_state):
     """
     data = np.asarray(data, dtype=np.int8).ravel()
 
-    # Convert integer init to binary vector [x1, x2, ..., x11]
-    # Per spec Figure 36-50: x1 is the leftmost cell (feedback input),
-    # x11 is the rightmost cell (output). LSB of the integer maps to x1.
-    # MATLAB: de2bi(init_state, 11, 'right-msb') produces
-    #   [LSB, ..., MSB] which is [x1, x2, ..., x11].
+    # Convert integer init to binary vector [x1, x2, ..., x11].
+    # Per Table 36-1: "the first bit of the scrambling sequence equals
+    # the LSB of SCRAMBLER_INITIAL_VALUE."  Since the first output bit
+    # is reg[10] (= x11), we need reg[10] = LSB of init_state.  The
+    # 'left-msb' bit ordering places MSB at index 0 and LSB at index 10,
+    # so output = reg[10] emits the LSB of init first (spec-compliant).
     # Accept either a scalar integer seed or an 11-element bit vector.
-    # np.ndim(x) == 0 catches Python ints, numpy 0-d arrays and numpy
+    # np.ndim(x) == 0 catches Python ints, numpy 0-d arrays, and numpy
     # scalar types (e.g. np.int64) uniformly.
     is_scalar = np.ndim(init_state) == 0
     if is_scalar:
@@ -58,9 +65,10 @@ def eht_scrambler(data, init_state):
                 "init_state must be 1..2047 (nonzero 11-bit LFSR seed)"
             )
         reg = np.zeros(11, dtype=np.int8)
-        # 'right-msb' in MATLAB de2bi: index 0 = LSB = x1
+        # 'left-msb' bit ordering: index 0 = MSB (= x1),
+        # index 10 = LSB (= x11).
         for i in range(11):
-            reg[i] = (val >> i) & 1
+            reg[i] = (val >> (10 - i)) & 1
     else:
         reg = np.asarray(init_state, dtype=np.int8).ravel().copy()
         if len(reg) != 11:

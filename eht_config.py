@@ -164,9 +164,9 @@ def _ldpc_params(N_CBPS, R_num, R_den, psdu_bytes, N_service,
 
 
 def eht_config(BW=80, MCS=7, GI=0.8, LTFType='auto', PayloadBytes=1000,
-               ScramblerInit=1, Coding='auto', NominalPacketPadding=16,
-               UL_DL=0, BSS_Color=0, TXOP=127, STA_ID=0, Beamformed=0,
-               SpatialReuse=0, EHT_SIG_MCS=0):
+               ScramblerInit=1, NumMPDUs=1, Coding='auto',
+               NominalPacketPadding=16, UL_DL=0, BSS_Color=0, TXOP=127,
+               STA_ID=888, Beamformed=0, SpatialReuse=0, EHT_SIG_MCS=0):
     """Create configuration for 802.11be EHT SU PPDU (SISO 1SS).
 
     Parameters
@@ -183,6 +183,10 @@ def eht_config(BW=80, MCS=7, GI=0.8, LTFType='auto', PayloadBytes=1000,
         PSDU length in bytes.
     ScramblerInit : int
         11-bit scrambler seed, 1-2047.
+    NumMPDUs : int
+        Number of real MPDU subframes in the A-MPDU (default 1 = S-MPDU).
+        Set N>1 for multi-MPDU A-MPDU; consecutive sequence numbers
+        0..N-1 per Section 10.3.2.14.2.
     Coding : str
         'BCC', 'LDPC', or 'auto'.
     NominalPacketPadding : int
@@ -222,6 +226,7 @@ def eht_config(BW=80, MCS=7, GI=0.8, LTFType='auto', PayloadBytes=1000,
     cfg['GI']             = GI
     cfg['PayloadBytes']   = PayloadBytes
     cfg['ScramblerInit']  = ScramblerInit
+    cfg['NumMPDUs']       = NumMPDUs
     cfg['NSS']            = 1   # SISO 1SS
 
     # Per Section 36.3.13.2 (p.813): the scrambler seed must be a nonzero
@@ -230,6 +235,12 @@ def eht_config(BW=80, MCS=7, GI=0.8, LTFType='auto', PayloadBytes=1000,
         raise ValueError(
             "ScramblerInit must be 1..2047 (nonzero 11-bit LFSR seed "
             "per Section 36.3.13.2)"
+        )
+
+    # Validate NumMPDUs (must be a positive integer; 1 = S-MPDU).
+    if (not isinstance(NumMPDUs, (int, np.integer))) or NumMPDUs < 1:
+        raise ValueError(
+            f"NumMPDUs must be a positive integer (>= 1). Got {NumMPDUs}."
         )
 
     # Validate PayloadBytes
@@ -279,25 +290,44 @@ def eht_config(BW=80, MCS=7, GI=0.8, LTFType='auto', PayloadBytes=1000,
     cfg['R_den']    = row[4]
     cfg['R']        = row[3] / row[4]
 
-    # --- FFT size and subcarrier allocation (Table 36-19/20/21) ---
-    bw_params = {
-        20:  {'NFFT': 256,  'N_SD': 234,  'N_SP': 8,  'N_SR': 122},
-        40:  {'NFFT': 512,  'N_SD': 468,  'N_SP': 16, 'N_SR': 244},
-        80:  {'NFFT': 1024, 'N_SD': 980,  'N_SP': 16, 'N_SR': 500},
-        160: {'NFFT': 2048, 'N_SD': 1960, 'N_SP': 32, 'N_SR': 1012},
-        320: {'NFFT': 4096, 'N_SD': 3920, 'N_SP': 64, 'N_SR': 2036},
+    # --- Subcarrier allocation per BW (Table 36-19/20/21) ---
+    sc_params = {
+        20:  {'N_SD': 234,  'N_SP': 8,  'N_SR': 122},
+        40:  {'N_SD': 468,  'N_SP': 16, 'N_SR': 244},
+        80:  {'N_SD': 980,  'N_SP': 16, 'N_SR': 500},
+        160: {'N_SD': 1960, 'N_SP': 32, 'N_SR': 1012},
+        320: {'N_SD': 3920, 'N_SP': 64, 'N_SR': 2036},
     }
-    if BW not in bw_params:
+    if BW not in sc_params:
         raise ValueError("BW must be 20, 40, 80, 160, or 320")
 
-    bp = bw_params[BW]
-    cfg['NFFT'] = bp['NFFT']
+    bp = sc_params[BW]
     cfg['N_SD'] = bp['N_SD']
     cfg['N_SP'] = bp['N_SP']
     cfg['N_SR'] = bp['N_SR']
-
     cfg['N_ST'] = cfg['N_SD'] + cfg['N_SP']
-    cfg['Fs']   = BW * 1e6   # Sample rate
+
+    # --- Oversampled IFFT synthesis: all BW output at Fs = 480 MHz ---
+    #
+    # Equivalent OversamplingFactor per BW (= 480 / cfg['BW']):
+    #   BW=20  -> 24x   (NFFT 256  -> 6144)
+    #   BW=40  -> 12x   (NFFT 512  -> 6144)
+    #   BW=80  -> 6x    (NFFT 1024 -> 6144)
+    #   BW=160 -> 3x    (NFFT 2048 -> 6144)
+    #   BW=320 -> 1.5x  (NFFT 4096 -> 6144)
+    #
+    # Subcarrier spacing is invariant at 78.125 kHz, so NFFT = Fs/df = 6144
+    # for every BW.  This is bandlimited interpolation via zero-padded IFFT
+    # with no anti-image FIR -- the mathematically optimal oversampler
+    # (Oppenheim & Schafer Section 4.6.2).
+    #
+    # Advantages over post-IFFT polyphase resampling:
+    #   - Zero filter artifacts (no transition-band ripple, no passband droop)
+    #   - Zero filter group delay, no CP/ISI interaction
+    #   - Edge subcarriers preserve their full EVM (no aliasing from image)
+    #   - Simpler pipeline (no resample/mask step)
+    cfg['NFFT'] = 6144
+    cfg['Fs']   = 480e6
 
     # --- N_20MHz ---
     bw_to_n20 = {20: 1, 40: 2, 80: 4, 160: 8, 320: 16}
@@ -477,13 +507,15 @@ def eht_config(BW=80, MCS=7, GI=0.8, LTFType='auto', PayloadBytes=1000,
         c_sym_table['eht_sig_mcs_table']['n_sym'][mcs_row]
     )
 
-    # Only EHT_SIG_MCS=0 (BPSK 1/2) is fully exercised.
-    if EHT_SIG_MCS != 0:
+    # gen_eht_sig supports EHT_SIG_MCS in {0, 1}:
+    #   MCS 0: BPSK 1/2 -> 2 symbols x 52 bits each
+    #   MCS 1: QPSK 1/2 -> 1 symbol  x 104 bits
+    # MCS 2 (16-QAM) and MCS 3 (BPSK-DCM) need future implementation.
+    if EHT_SIG_MCS not in (0, 1):
         raise ValueError(
             f"EHT_SIG_MCS = {EHT_SIG_MCS} not implemented in gen_eht_sig "
-            "(only MCS 0 = BPSK 1/2 is currently supported). "
-            "The non-zero MCS values would require QPSK/16-QAM/BPSK-DCM "
-            "constellation mapping and adjusted symbol counts."
+            "(only MCS 0 = BPSK 1/2 and MCS 1 = QPSK 1/2 are supported). "
+            "MCS 2 (16-QAM) and MCS 3 (BPSK-DCM) need future implementation."
         )
 
     # --- Pre-FEC padding factor a (IEEE 802.11be-2024 Eq.(36-58)/(36-59)) ---

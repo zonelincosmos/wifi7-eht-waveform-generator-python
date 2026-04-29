@@ -363,7 +363,7 @@ def _get_heltf_80_halves():
     # NOTE: This function is only called from the ltf_type==1 branches
     # (BW=160/320), which are unreachable because eht_config rejects
     # LTFType=1 for all valid (LTFType, GI) pairs per Table 36-36.
-    # The right_1x data in the MATLAB source has 420 values (truncated from
+    # The right_1x data in the reference source has 420 values (truncated from
     # the expected 500). We pad with zeros to 500 to match left_1x length.
     left_1x = np.array([
         -1,0,0,0,-1,0,0,0,+1,0,0,0,+1,0,0,0,+1,0,0,0,+1,0,0,0,+1,0,0,0,-1,0,0,0,
@@ -400,7 +400,7 @@ def _get_heltf_80_halves():
         0,0,0,-1,0,0,0,+1,0,0,0,-1,0,0,0,+1,0,0,0,-1,0,0,0,-1,0,0,0,-1,0,0,0,+1,
         0,0,0,+1
     ], dtype=np.float64)
-    # Pad to 500 to match left_1x length (MATLAB source has 420 values;
+    # Pad to 500 to match left_1x length (reference source has 420 values;
     # this path is unreachable under the valid_combo gate)
     right_1x = np.zeros(500, dtype=np.float64)
     right_1x[:len(_right_data)] = _right_data

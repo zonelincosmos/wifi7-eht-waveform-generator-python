@@ -44,7 +44,7 @@ def gen_l_stf(cfg):
         g = gamma[seg]           # per-segment gamma
 
         for k_local in range(-26, 27):   # -26..26
-            val = S_k[k_local + 26]      # Python 0-indexed (MATLAB used k+27)
+            val = S_k[k_local + 26]      # 0-indexed (1-indexed reference uses k+27)
             if val == 0:
                 continue
 
@@ -53,7 +53,7 @@ def gen_l_stf(cfg):
             k_global = k_local - Ks
             fft_idx = k_global * c['SC_RATIO']
 
-            bin_idx = fft_idx % NFFT     # Python mod (MATLAB mod + 1)
+            bin_idx = fft_idx % NFFT     # 0-indexed bin (1-indexed reference uses mod + 1)
             freq[bin_idx] = g * val
 
     # Normalization per Eq.(36-15) with Eq.(36-11):

@@ -142,7 +142,8 @@ def ldpc_params(n_cbps, r_num, r_den, psdu_bytes, n_service,
     # --- Step (c): shortening bits (Eq. 19-37) ---
     # Cast explicitly to int: round() returns a float, but downstream LDPC
     # loops index arrays with n_shrt / n_punc / n_rep, and the emitted
-    # params dict is compared against MATLAB integer cfg fields.
+    # params dict is compared against integer cfg fields produced by the
+    # reference implementation.
     n_shrt = int(max(0, round(n_cw * l_ldpc * r) - n_pld))
 
     # --- Step (d): puncturing bits (Eq. 19-38) ---

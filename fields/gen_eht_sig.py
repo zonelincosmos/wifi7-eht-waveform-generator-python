@@ -27,7 +27,7 @@ from utils.crc4 import crc4_usig
 # Helper: de2bi(val, n, 'right-msb') -- LSB-first bit vector
 # =========================================================================
 def _de2bi(val, n_bits):
-    """Convert integer to LSB-first bit vector (MATLAB de2bi 'right-msb')."""
+    """Convert integer to LSB-first bit vector ('right-msb' semantics)."""
     bits = np.zeros(n_bits, dtype=np.int8)
     for i in range(n_bits):
         bits[i] = val & 1

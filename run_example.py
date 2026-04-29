@@ -87,14 +87,16 @@ else:
 # =========================================================================
 #  Generate Waveform
 # =========================================================================
-# Use a deterministic cycling byte pattern for the user payload so that
-# this script produces the same waveform byte-for-byte on every
-# platform, independent of the underlying Mersenne Twister
-# implementation (MATLAB's rng and numpy's MT19937 produce different
-# streams for the same seed, so the "random" default PSDU is not
-# portable across environments).  The pattern 0, 1, 2, ..., 255, 0, 1,
-# ... is easy to reproduce on any reference implementation.
-user_payload = np.arange(PayloadBytes, dtype=np.uint8)  # cycles mod 256
+# Match the spec-reference example's default PSDU exactly.  The reference
+# example calls its waveform-generator without a user payload, which falls
+# back to ``rng(0); randi([0 255], 1, user_data_len, 'uint8')`` (Mersenne
+# Twister, mt19937ar, seed 0).  ``utils/mt19937.py`` re-implements that
+# exact stream in pure Python so the time-domain magnitude, PSD, and
+# constellation plots are identical between the two languages without any
+# external runtime dependency.  Numpy's RandomState(0) cannot be used
+# directly because numpy's seeding differs from the reference's.
+from utils.mt19937 import randi_uint8
+user_payload = randi_uint8(seed=0, n=PayloadBytes)
 
 waveform, cfg, psdu_out = eht_waveform_gen(
     BW=BW, MCS=MCS, GI=GI, LTFType=LTFType, PayloadBytes=PayloadBytes,
@@ -251,7 +253,7 @@ if HAS_MPL:
 
     c = eht_constants(cfg['BW'])
     sym_len = cfg['NFFT'] + cfg['CP_Data']
-    # Match MATLAB run_example.m: plot the first 5 Data OFDM symbols
+    # Match the reference example: plot the first 5 Data OFDM symbols
     # (clamped to N_SYM) with solid 3-pt markers and no transparency.
     n_syms_to_plot = min(5, cfg['N_SYM'])
 

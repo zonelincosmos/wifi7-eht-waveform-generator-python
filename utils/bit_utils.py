@@ -7,7 +7,7 @@ Bit manipulation utilities for 802.11be EHT waveform generation.
 
 Conversions between integers, byte arrays, and bit vectors (numpy arrays
 of 0/1 with dtype=np.int8).  All bit vectors use MSB-first ordering,
-matching MATLAB ``de2bi(x, n, 'left-msb')``.
+matching ``de2bi(x, n, 'left-msb')`` semantics.
 """
 
 import numpy as np
@@ -16,7 +16,7 @@ import numpy as np
 def int2bits(val, n_bits):
     """Convert a non-negative integer to an MSB-first bit vector.
 
-    Equivalent to MATLAB ``de2bi(val, n_bits, 'left-msb')``.
+    Equivalent to ``de2bi(val, n_bits, 'left-msb')``.
 
     Parameters
     ----------

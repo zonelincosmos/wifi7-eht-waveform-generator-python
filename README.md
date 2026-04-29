@@ -11,10 +11,20 @@ from eht_waveform_gen import eht_waveform_gen
 waveform, cfg, psdu = eht_waveform_gen(
     BW=320, MCS=13, GI=3.2, LTFType=4, PayloadBytes=5000,
 )
-# waveform: complex128 numpy array, 320 MHz sample rate, 30 720 samples
+# waveform: complex128 numpy array, 480 MHz sample rate, 46 080 samples
 # cfg:      dict with every derived PHY parameter
 # psdu:     uint8 numpy array, the A-MPDU bytes fed to the Data field
 ```
+
+> **v2.0.0 architecture:** every bandwidth is synthesised at a constant
+> 480 MHz sample rate (NFFT = 6144) via bandlimited zero-padded IFFT.
+> Equivalent oversampling factor = 480 / BW (24x at 20 MHz, 1.5x at 320 MHz).
+>
+> **v2.0.0 default-PSDU parity:** ``run_example.py`` reproduces the
+> spec-reference example's default PSDU byte-for-byte via a pure-Python
+> MT19937 re-implementation (``utils/mt19937.py``).  Time-domain, PSD,
+> and constellation plots are visually indistinguishable across the
+> two languages without an external runtime dependency.
 <img width="1837" height="614" alt="image" src="https://github.com/user-attachments/assets/33bde4db-069b-4bc2-8a60-a2c7b7b89514" />
 
 
@@ -30,8 +40,13 @@ waveform, cfg, psdu = eht_waveform_gen(
 
 ## Feature highlights
 
-- **All five bandwidths**: 20, 40, 80, 160, 320 MHz.
+- **All five bandwidths**: 20, 40, 80, 160, 320 MHz, all output at
+  Fs = 480 MHz (NFFT = 6144) via bandlimited zero-padded IFFT.
 - **All fourteen MCS**: MCS 0 (BPSK 1/2) through MCS 13 (4096-QAM 5/6).
+- **Multi-MPDU A-MPDU**: `NumMPDUs` parameter; auto-bumps to fit the
+  HE/EHT 12-bit MPDU Length cap.
+- **BCC and LDPC** with spec-compliant shortening / puncturing /
+  repetition and the EHT extra-symbol path (Eq. 36-56 / 36-58).
 - **Pure Python**: only `numpy` is required at runtime; `matplotlib`
   is optional and only used by `run_example.py` for plots.
 
@@ -113,7 +128,8 @@ machine (falls back to the Agg matplotlib backend automatically).
 | EHT-LTF type    | 2x, 4x                                |
 | Coding          | BCC (BW = 20, MCS <= 9), else LDPC    |
 | Spatial streams | 1 (SISO)                              |
-| PayloadBytes    | 38 .. 16 383 bytes per subframe       |
+| PayloadBytes    | 38 .. 1 048 576 bytes (auto multi-MPDU when > 4 KB) |
+| NumMPDUs        | >= 1 (auto-bumped to fit 12-bit cap)  |
 
 Valid `(LTFType, GI)` pairs per IEEE 802.11be-2024 Table 36-36:
 `(2, 0.8)`, `(2, 1.6)`, `(4, 0.8)`, `(4, 3.2)`.
@@ -132,15 +148,16 @@ in parentheses):
 | `PayloadBytes`         | APEP_LENGTH in bytes (PSDU length field)            |
 | `PSDU`                 | Optional uint8 user payload; framed via A-MPDU      |
 | `ScramblerInit`        | 11-bit scrambler seed, 1..2047                      |
+| `NumMPDUs`             | Real MPDU subframes in the A-MPDU (default 1)       |
 | `Coding`               | `'BCC'`, `'LDPC'`, or `'auto'`                      |
 | `NominalPacketPadding` | PE duration in us: 0, 8, 16, or 20                  |
 | `UL_DL`                | U-SIG-1 B6: 0 = downlink, 1 = uplink                |
 | `BSS_Color`            | U-SIG-1 B7..B12, 0..63                              |
 | `TXOP`                 | U-SIG-1 B13..B19, 0..127                            |
-| `STA_ID`               | EHT-SIG user field B0..B10, 0..2047                 |
+| `STA_ID`               | EHT-SIG user field B0..B10, 0..2047 (default 888)   |
 | `Beamformed`           | EHT-SIG user field B20: 0 or 1                      |
 | `SpatialReuse`         | EHT-SIG common B0..B3, 0..15                        |
-| `EHT_SIG_MCS`          | U-SIG-2 B9..B10, 0..3 (BPSK only implemented)       |
+| `EHT_SIG_MCS`          | U-SIG-2 B9..B10, 0 or 1 (BPSK 1/2 / QPSK 1/2)       |
 | `verbose`              | Print progress and summary lines                    |
 
 ## Spec references

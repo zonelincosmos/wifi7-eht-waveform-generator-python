@@ -9,10 +9,14 @@ Generate EHT Data field OFDM symbols.
 
 Section 36.3.13 of IEEE 802.11be-2024.
 
-Pipeline: SERVICE + PSDU + tail + padding -> scramble -> FEC encode
+Pipeline: SERVICE + PSDU + padding + tail -> scramble -> FEC encode
           -> interleave (BCC) -> segment parser -> constellation map
           -> LDPC tone mapping -> pilot insertion -> normalization
           -> OFDM modulate -> concatenate symbols.
+
+Note: tail comes AFTER pad per Section 36.3.7.10 step (b), differing from
+legacy 11n/ac convention (which had tail before pad).  For LDPC tail is
+empty so the order has no effect; for BCC at BW=20 it is decisive.
 """
 
 import numpy as np
@@ -77,6 +81,25 @@ def _ldpc_tone_map(sb_in, BW):
     return sb_out
 
 
+def _pn9_seed511(n_bits):
+    """PN9 (x^9 + x^5 + 1) Galois LFSR with seed = 0x1FF = 511.
+
+    Used for post-FEC PHY padding.  IEEE 802.11be-2024 Section 36.3.13.3.5
+    states that 'the values of the post-FEC padding bits are not specified
+    and are left up to implementation'.  This PN9 sequence is one such
+    valid choice.
+    """
+    reg = 511
+    out = np.zeros(n_bits, dtype=np.int8)
+    for i in range(n_bits):
+        out[i] = reg & 1
+        fb = ((reg >> 4) & 1) ^ (reg & 1)
+        reg >>= 1
+        if fb:
+            reg |= 256
+    return out
+
+
 def gen_data_field(cfg, psdu):
     """Generate EHT Data field OFDM symbols.
 
@@ -107,7 +130,7 @@ def gen_data_field(cfg, psdu):
     if psdu.dtype == np.uint8:
         # Byte vector -> bit vector, LSB first per byte
         # (Section 36.3.13.2: "bit 0 first and bit 7 last")
-        # MATLAB: bitget(double(psdu(i)), 1:8) extracts LSB first
+        # (`bitget(double(psdu(i)), 1:8)` extracts LSB first)
         n_bytes = len(psdu)
         psdu_bits = np.zeros(n_bytes * 8, dtype=np.int8)
         for i in range(n_bytes):
@@ -140,20 +163,26 @@ def gen_data_field(cfg, psdu):
     n_pad_phy = cfg.get('N_PAD_PHY_bits', cfg['N_PAD'])
     pad_bits = np.zeros(n_pad_phy, dtype=np.int8)
 
-    # Assemble: SERVICE + PSDU + Tail + Pad
-    data_bits = np.concatenate([service_bits, psdu_bits, tail_bits, pad_bits])
+    # Assemble: SERVICE + PSDU + Pad + Tail per IEEE 802.11be-2024
+    # Section 36.3.7.10 step (b): "Append the pre-FEC padding bits ...
+    # If the user is using BCC, then add tail bits."  Tail at END (NOT
+    # legacy 11n/ac order).  For LDPC tail_bits is empty so the ordering
+    # is identical, but for BCC it changes every encoded bit.
+    data_bits = np.concatenate([service_bits, psdu_bits, pad_bits, tail_bits])
 
     # ------------------------------------------------------------------
     # Scramble
     # ------------------------------------------------------------------
     scrambled, _ = eht_scrambler(data_bits, cfg['ScramblerInit'])
 
-    # Zero out tail bits after scrambling (for BCC)
+    # For BCC, reset the trailing 6 tail bits to zeros AFTER scrambling so
+    # the convolutional encoder's trellis terminates to the zero state at
+    # the end of the data field.  The receiver's Viterbi decoder relies on
+    # this zero-state termination for last-symbol traceback.  With tail at
+    # the END (per Section 36.3.7.10), the tail bits are simply the last
+    # 6 bits of the scrambled stream.
     if cfg['Coding'] == 'BCC':
-        tail_start = 16 + len(psdu_bits)       # 0-indexed start of tail
-        tail_end = tail_start + 6              # exclusive end
-        if tail_end <= len(scrambled):
-            scrambled[tail_start:tail_end] = 0
+        scrambled[-6:] = 0
 
     # ------------------------------------------------------------------
     # FEC Encode
@@ -195,21 +224,15 @@ def gen_data_field(cfg, psdu):
             [cfg['R_num'], cfg['R_den']],
             lp
         )
-        # Post-FEC padding per Sec.36.3.13.3.5: when a_init < 4 we have
-        # N_avbits < N_SYM * N_CBPS. Spec leaves content to implementation;
-        # match MATLAB reference (gen_data_field.m:87-102) which fills with
-        # PN11 scrambler output init = ScramblerInit XOR 1387 (fallback to 1
-        # if 0) to avoid structured constellation patterns.
+        # Post-FEC padding per IEEE 802.11be-2024 Section 36.3.13.3.5: when
+        # a_init < 4 we have N_avbits < N_SYM * N_CBPS.  Spec leaves the
+        # content "up to implementation"; the reference uses a PN9
+        # (x^9 + x^5 + 1) Galois LFSR with seed 0x1FF (= 511).
         total_coded = cfg['N_SYM'] * cfg['N_CBPS']
         n_pad_postfec = total_coded - len(encoded)
         if n_pad_postfec > 0:
-            pad_init = cfg['ScramblerInit'] ^ 1387
-            if pad_init == 0:
-                pad_init = 1
-            pad_bits, _ = eht_scrambler(
-                np.zeros(n_pad_postfec, dtype=np.int8), pad_init
-            )
-            encoded = np.concatenate([encoded, pad_bits.astype(np.int8)])
+            pad_bits_postfec = _pn9_seed511(n_pad_postfec)
+            encoded = np.concatenate([encoded, pad_bits_postfec])
 
     # ------------------------------------------------------------------
     # Generate OFDM symbols
@@ -336,7 +359,7 @@ def gen_data_field(cfg, psdu):
         )
         for i in range(len(data_idx)):
             k = data_idx[i]
-            fft_bin = k % NFFT           # MATLAB: mod(k, NFFT) + 1 (1-idx)
+            fft_bin = k % NFFT           # (1-indexed reference uses mod(k, NFFT) + 1)
             freq[fft_bin] = data_syms[i]
 
         # --------------------------------------------------------------
@@ -349,8 +372,8 @@ def gen_data_field(cfg, psdu):
 
         # Per-subcarrier pilot base values
         # Psi = [1,1,1,-1,-1,1,1,1] cycling with (sym_idx + pilot_k) mod 8
-        # MATLAB: Psi(mod(sym_idx + pp - 1, 8) + 1) with pp 1-indexed
-        # Python: Psi[(sym_idx + pp) % 8] with pp 0-indexed
+        # 1-indexed reference: Psi(mod(sym_idx + pp - 1, 8) + 1) with pp 1-indexed
+        # 0-indexed here:      Psi[(sym_idx + pp) % 8]            with pp 0-indexed
         base_pilots = np.zeros(n_pilots, dtype=np.float64)
         for pp in range(n_pilots):
             base_pilots[pp] = Psi[(sym_idx + pp) % 8]

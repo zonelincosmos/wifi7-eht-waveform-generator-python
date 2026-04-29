@@ -39,8 +39,8 @@ from fields.gen_data_field import gen_data_field
 from utils.ampdu import build_ampdu
 
 
-def eht_waveform_gen(BW=80, MCS=7, GI=0.8, LTFType=2, PayloadBytes=1000,
-                     PSDU=None, ScramblerInit=1, Coding='auto',
+def eht_waveform_gen(BW=80, MCS=7, GI=0.8, LTFType='auto', PayloadBytes=1000,
+                     PSDU=None, ScramblerInit=1, NumMPDUs=1, Coding='auto',
                      verbose=True, **kwargs):
     """Generate IEEE 802.11be (WiFi 7) EHT SU PPDU waveform.
 
@@ -57,10 +57,17 @@ def eht_waveform_gen(BW=80, MCS=7, GI=0.8, LTFType=2, PayloadBytes=1000,
     PayloadBytes : int
         PSDU length in bytes.
     PSDU : numpy.ndarray or None
-        User-supplied PSDU (uint8 byte vector of length PayloadBytes).
-        If None, a reproducible random PSDU is generated with seed 0.
+        User-supplied PSDU bytes (uint8 vector).  Will be split across
+        ``NumMPDUs`` chunks, padded/truncated to fit the available
+        user-data space.  If None, a deterministic cycling 0..255 byte
+        pattern is used (platform-portable across reference
+        implementations).
     ScramblerInit : int
         11-bit scrambler seed, 1-2047.
+    NumMPDUs : int
+        Number of real MPDU subframes in the A-MPDU (default 1 = S-MPDU).
+        Auto-increased if the per-subframe MPDU would exceed the HE/EHT
+        12-bit Length cap of 4095 bytes.
     Coding : str
         'BCC', 'LDPC', or 'auto'.
     verbose : bool
@@ -82,7 +89,7 @@ def eht_waveform_gen(BW=80, MCS=7, GI=0.8, LTFType=2, PayloadBytes=1000,
     # --- Configuration ---
     cfg = eht_config(BW=BW, MCS=MCS, GI=GI, LTFType=LTFType,
                      PayloadBytes=PayloadBytes, ScramblerInit=ScramblerInit,
-                     Coding=Coding, **kwargs)
+                     NumMPDUs=NumMPDUs, Coding=Coding, **kwargs)
 
     if verbose:
         print('=== 802.11be EHT SU PPDU Waveform Generator ===')
@@ -108,32 +115,78 @@ def eht_waveform_gen(BW=80, MCS=7, GI=0.8, LTFType=2, PayloadBytes=1000,
 
     # --- Generate PSDU in A-MPDU format ---
     # Per IEEE 802.11-2024 Section 10.12, EHT PPDUs must carry A-MPDU format.
-    # PayloadBytes = total PSDU length delivered to the PHY. Structure:
-    #   [delim(4)] [MAC_hdr(26) + user_data + FCS(4)] [pad(0-3)] [EOF delims...]
-    # Minimum overhead: 4 + 26 + 4 + 4 (at least one EOF delim) = 38 bytes.
-    ampdu_overhead = 38
-    if PayloadBytes < ampdu_overhead:
+    # PayloadBytes = total PSDU length delivered to the PHY.  Structure for
+    # num_mpdus = N real subframes:
+    #   [delim_1 + MAC_hdr + chunk_1 + FCS + pad(0-3)]
+    #   [delim_2 + MAC_hdr + chunk_2 + FCS + pad(0-3)]
+    #   ...
+    #   [delim_N + MAC_hdr + chunk_N + FCS + pad(0-3)]   (EOF=0 on each)
+    #   [EOF padding delim x M]                          (fills remainder)
+    # Per-subframe overhead (before alignment pad) = 4 (delim) + 26 (MAC)
+    # + 4 (FCS) = 34 bytes.
+    num_mpdus = cfg['NumMPDUs']
+    per_mpdu_overhead = 34
+    max_align_pad     = 3
+    min_tail          = 4
+
+    # HE/EHT A-MPDU subframe delimiter Length is 12 bits (max 4095 bytes).
+    # Per-subframe MPDU = 26 + chunk + 4 <= 4095, so max chunk per subframe
+    # is 4065 bytes.  If the user's NumMPDUs is too small for the requested
+    # PayloadBytes, the per-subframe MPDU would exceed 4095 ->
+    # _build_delimiter would raise.  Auto-increase NumMPDUs to fit.
+    MPDU_LENGTH_LIMIT  = 4095
+    max_chunk_per_mpdu = MPDU_LENGTH_LIMIT - per_mpdu_overhead + 4   # = 4065
+    denom              = (max_chunk_per_mpdu + per_mpdu_overhead - 4
+                          + max_align_pad)                           # = 4098
+    min_num_mpdus_for_12bit = max(
+        1, -(-(PayloadBytes - min_tail) // denom)   # ceil division
+    )
+    if num_mpdus < min_num_mpdus_for_12bit:
+        if verbose:
+            print(
+                f'NOTE: Auto-increasing NumMPDUs {num_mpdus} -> '
+                f'{min_num_mpdus_for_12bit} to fit per-subframe MPDU within '
+                f'HE/EHT 12-bit length limit ({MPDU_LENGTH_LIMIT} B).'
+            )
+        num_mpdus = min_num_mpdus_for_12bit
+        cfg['NumMPDUs'] = num_mpdus
+
+    ampdu_overhead_min = num_mpdus * per_mpdu_overhead + min_tail
+    if PayloadBytes < ampdu_overhead_min + num_mpdus:
         raise ValueError(
-            f'PayloadBytes must be >= {ampdu_overhead} (A-MPDU overhead: '
-            '4 delimiter + 26 MAC header + 4 FCS + 4 EOF)'
+            f'PayloadBytes={PayloadBytes} too small for num_mpdus={num_mpdus}. '
+            f'Minimum = {ampdu_overhead_min + num_mpdus} '
+            f'({num_mpdus} * 34-byte overhead + {min_tail} min tail + '
+            f'{num_mpdus} min 1 byte/chunk).'
         )
 
-    # Determine the largest user-data length that fits with 4-byte alignment
-    # and at least one EOF delimiter (matches build_ampdu.m descending loop).
-    raw_user_space = PayloadBytes - 34
+    # Compute maximum total user-data bytes such that, after each subframe
+    # is 4-byte aligned, the total subframe bytes leave at least 4 bytes
+    # (multiple of 4) for EOF padding at the end.
+    max_user = (PayloadBytes - num_mpdus * per_mpdu_overhead
+                             - num_mpdus * max_align_pad
+                             - min_tail)
     user_data_len = 0
-    for user_try in range(raw_user_space, -1, -1):
-        subframe_unpad = 34 + user_try
-        pad = (4 - (subframe_unpad % 4)) % 4
-        subframe_len = subframe_unpad + pad
-        remaining = PayloadBytes - subframe_len
-        if remaining >= 4 and remaining % 4 == 0:
+    for user_try in range(max_user, -1, -1):
+        chunk_base = user_try // num_mpdus
+        chunk_rem  = user_try % num_mpdus
+        total_subframes = 0
+        for i in range(num_mpdus):
+            cs = chunk_base + (1 if i < chunk_rem else 0)
+            sf = per_mpdu_overhead + cs                          # unpadded
+            pad = (4 - (sf % 4)) % 4
+            total_subframes += sf + pad
+        remaining = PayloadBytes - total_subframes
+        if remaining >= min_tail and remaining % 4 == 0:
             user_data_len = user_try
             break
 
     if PSDU is None:
-        rng = np.random.RandomState(0)  # reproducible default
-        user_data = rng.randint(0, 256, size=user_data_len).astype(np.uint8)
+        # Reproducible default user data.  Cycling 0..255 pattern is
+        # platform-portable (Mersenne Twister streams differ between
+        # numpy and other implementations even with the same seed, so
+        # an explicit deterministic pattern is preferred for fixtures).
+        user_data = np.arange(user_data_len, dtype=np.uint8)
     else:
         user_psdu = np.asarray(PSDU, dtype=np.uint8).ravel()
         if len(user_psdu) <= user_data_len:
@@ -142,14 +195,17 @@ def eht_waveform_gen(BW=80, MCS=7, GI=0.8, LTFType=2, PayloadBytes=1000,
         else:
             user_data = user_psdu[:user_data_len].copy()
 
-    # Build A-MPDU formatted PSDU with pre-FEC MAC padding per Sec.10.12.7.
+    # Build A-MPDU formatted PSDU with pre-FEC MAC padding per Section 10.12.7.
     # Total PSDU delivered to the PHY = APEP_LENGTH + N_PAD_MAC_bytes
-    # (Eq 36-66).  The extra bytes are EOF padding delimiters (signature
+    # (Eq. 36-66).  The extra bytes are EOF padding delimiters (signature
     # 0x4E) so the receiver sees a valid A-MPDU all the way through the
     # pre-FEC region.
     total_psdu_bytes = PayloadBytes + cfg.get('N_PAD_MAC_bytes', 0)
-    psdu = build_ampdu(user_data, total_psdu_bytes)
+    psdu = build_ampdu(user_data, total_psdu_bytes, num_mpdus)
     psdu_out = psdu.copy()
+    if verbose:
+        print(f'A-MPDU: {num_mpdus} real MPDU subframe(s), '
+              f'user_data = {user_data_len} bytes total')
 
     # --- Generate each field ---
     if verbose:

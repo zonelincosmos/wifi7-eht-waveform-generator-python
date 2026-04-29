@@ -44,8 +44,8 @@ def eht_constants(BW=80):
     # Per-tone |S_k|^2 = (1/sqrt(2))^2 * |+-1+-j|^2 = (1/2) * 2 = 1
     # sum_k |S_k|^2 = 12 * 1 = 12
     # =====================================================================
-    # 53 elements: index offset: array[k+26] = S_k (Python 0-indexed,
-    # MATLAB used k+27 because 1-indexed)
+    # 53 elements: index offset: array[k+26] = S_k (Python 0-indexed;
+    # the reference uses k+27 because of 1-indexed array convention).
     S = np.zeros(53, dtype=np.complex128)
     sq = 1.0 / np.sqrt(2.0)    # Eq. 19-8 QPSK normalization
     # Nonzero values -- signs matching IEEE 802.11-2024 Eq.(19-8):
@@ -111,11 +111,12 @@ def eht_constants(BW=80):
         c['gamma_preEHT'] = np.array([1, -1, -1, -1, 1, -1, -1, -1],
                                      dtype=np.complex128)
     elif BW == 320:
-        # Eq. 36-14 with phi1=1, phi2=1, phi3=-1.
-        # Segments ordered by K_Shift(i) = (15-2i)*32, i=0..15.
+        # Eq. 36-14 with (phi1, phi2, phi3) = (1, -1, -1) -- one of the
+        # eight sign combinations spec-permitted for BW=320.  Segments
+        # ordered by K_Shift(i) = (15 - 2i) * 32, i = 0..15.
         c['gamma_preEHT'] = np.array(
-            [1, -1, -1, -1,  1, -1, -1, -1,
-             1, -1, -1, -1, -1,  1,  1,  1],
+            [1, 1, 1, -1, -1, 1, 1, -1,
+             1, 1, 1, -1, -1, 1, 1, -1],
             dtype=np.complex128
         )
 

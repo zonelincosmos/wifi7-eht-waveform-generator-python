@@ -15,17 +15,9 @@ waveform, cfg, psdu = eht_waveform_gen(
 # cfg:      dict with every derived PHY parameter
 # psdu:     uint8 numpy array, the A-MPDU bytes fed to the Data field
 ```
-
-> **v2.0.0 architecture:** every bandwidth is synthesised at a constant
-> 480 MHz sample rate (NFFT = 6144) via bandlimited zero-padded IFFT.
-> Equivalent oversampling factor = 480 / BW (24x at 20 MHz, 1.5x at 320 MHz).
->
-> **v2.0.0 default-PSDU parity:** ``run_example.py`` reproduces the
-> spec-reference example's default PSDU byte-for-byte via a pure-Python
-> MT19937 re-implementation (``utils/mt19937.py``).  Time-domain, PSD,
-> and constellation plots are visually indistinguishable across the
-> two languages without an external runtime dependency.
-<img width="1837" height="614" alt="image" src="https://github.com/user-attachments/assets/33bde4db-069b-4bc2-8a60-a2c7b7b89514" />
+<img width="1732" height="466" alt="image" src="https://github.com/user-attachments/assets/29541824-ea66-47b6-b18a-d9f664f4331a" />
+<img width="729" height="737" alt="image" src="https://github.com/user-attachments/assets/ff46103c-f140-4aaf-83f2-79f87564c97a" />
+<img width="1239" height="617" alt="image" src="https://github.com/user-attachments/assets/380b4333-9d94-489f-8c3f-e3714eac9f0e" />
 
 
 ## Table of contents
@@ -69,35 +61,6 @@ No C / Fortran build step.  No platform-specific wheels.  Runs the
 same on Windows / macOS / Linux.
 
 ## Quick start
-
-### Minimal example
-
-```python
-from eht_waveform_gen import eht_waveform_gen
-
-wf, cfg, psdu = eht_waveform_gen()
-print(f'{len(wf)} samples at {cfg["Fs"]/1e6:.0f} MHz')
-# Default: BW=80, MCS=7, GI=0.8, LTF=2, 1000-byte payload
-```
-
-### Supply your own user payload
-
-```python
-import numpy as np
-from eht_waveform_gen import eht_waveform_gen
-
-user_bytes = np.frombuffer(b'Hello Wi-Fi 7 world!', dtype=np.uint8)
-
-wf, cfg, psdu = eht_waveform_gen(
-    BW=80, MCS=7, GI=0.8, LTFType=2,
-    PayloadBytes=1000,
-    PSDU=user_bytes,       # truncated / zero-padded to fit
-)
-```
-
-Your `user_bytes` becomes the MAC payload of a single MPDU inside an
-A-MPDU; everything else (delimiter, MAC header, FCS, EOF padding) is
-added for you so the waveform is decodable by a compliant receiver.
 
 ### Run the bundled example script
 
